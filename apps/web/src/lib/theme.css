@@ -1,3 +1,12 @@
+/* モバイル対応: 引っ張って更新(pull-to-refresh)やラバーバンドで盤面がずれるのを防ぎ、
+   タップ操作でのテキスト自動拡大(iOS)も抑える。ピンチズーム自体は許可したままにする
+   (アクセシビリティのため viewport の user-scalable は無効化しない)。 */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
 :root {
   /* 背景(夜空) */
   --bg-radial-top: radial-gradient(ellipse at 50% -10%, #332757 0%, #1c1633 55%, #120e22 100%);
@@ -77,7 +86,13 @@
   --card-border-w-selected: 3px;
 
   /* 基準解像度スケーリング */
-  --stage-scale: min(calc(100vw / 1920px), calc(100vh / 1080px));
+  /* --touch-kbd-reserve: モバイルの画面タッチキーボード(TouchKeyboard.svelte)表示中だけ
+     呼び出し側(BattleScreen/MatchBattleScreen)が .stage-viewport に inline style で上書きする
+     下部の予約高さ。position:fixed のキーボードは実ビューポート基準で最下部に重なるため、
+     予約しないとスケール済みステージ(特に手札)と重複してタップ不能になる。既定 0 なら
+     従来どおり画面いっぱいを使う。 */
+  --touch-kbd-reserve: 0px;
+  --stage-scale: min(calc(100vw / 1920px), calc((100vh - var(--touch-kbd-reserve)) / 1080px));
 }
 
 .stage-viewport {
@@ -89,6 +104,10 @@
      validated in the design handoff's Battle Prototype.dc.html. */
   position: fixed;
   inset: 0;
+  /* --touch-kbd-reserve 分だけ下端を切り上げ、TouchKeyboard 表示中は下に隙間を残す
+     (transform 済みの子孫に position:fixed を置くと viewport ではなく transform 祖先基準に
+     なってしまうため、キーボード自体は .stage の外側=このビューポートの兄弟に置く契約)。 */
+  bottom: var(--touch-kbd-reserve);
   display: flex;
   align-items: center;
   justify-content: center;

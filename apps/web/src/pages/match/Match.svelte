@@ -9,6 +9,7 @@
   import { MatchBot } from '../../lib/match-bot';
   import * as sound from '../../lib/sound.svelte';
   import { Countdown } from '../../lib/countdown.svelte';
+  import { isTouchKeyboardVisible, toggleTouchKeyboard } from '../../lib/touch-input.svelte';
   import MatchStartScreen from './MatchStartScreen.svelte';
   import MatchBattleScreen from './MatchBattleScreen.svelte';
   import MatchResultScreen from './MatchResultScreen.svelte';
@@ -48,6 +49,10 @@
   // 効果音のミュート状態(ADR 0002: 状態は親が sound モジュール経由で保持し props で渡す)。
   let muted = $state(sound.isMuted());
 
+  // 画面タッチキーボード(モバイル対応)の表示状態。Game.svelte と同じく touch-input
+  // モジュール(正)の $state を鏡写しする。
+  let touchKeyboardVisible = $state(isTouchKeyboardVisible());
+
   // 盤面結果音(被弾/防御=自陣 / 命中=相手)検出用の前値トラッカー(ADR 0012 の盤面結果節)。
   // 非リアクティブな plain let。null は未観測の番兵で、最初の観測ではベースライン設定のみ行い
   // 鳴らさない(初期満タンや取りこぼしでの誤発火を防ぐ)。新マッチ/再戦で null に戻す。
@@ -59,6 +64,11 @@
   function handleToggleMute(): void {
     sound.toggleMute();
     muted = sound.isMuted();
+  }
+
+  function handleToggleTouchKeyboard(): void {
+    toggleTouchKeyboard();
+    touchKeyboardVisible = isTouchKeyboardVisible();
   }
 
   // 自陣のデッキ(保存済みが正当ならそれ、無ければ STARTER_DECK)+ ボットは固定の既定デッキ。
@@ -173,6 +183,21 @@
     }
   }
 
+  // 打鍵1つ分の判定処理。物理キーボード(handleKeydown)と画面タッチキーボード
+  // (TouchKeyboard の onKey)の両方から呼ばれる共通経路(Game.svelte と同じ規約)。
+  function typeKey(key: string): void {
+    if (phase !== 'battle') {
+      return;
+    }
+    const now = performance.now();
+    const result = engine.pressKey(SELF_ID, key, now);
+    sound.playForResult(result);
+    if (result === 'accepted' || result === 'activated') {
+      imeWarning = false;
+    }
+    refresh(now);
+  }
+
   // window の keydown を一元処理する(対戦画面の表示中のみ捕捉される)。Game.svelte と同じ規約。
   function handleKeydown(e: KeyboardEvent): void {
     // カウントダウン中は一切の入力を無視する(誤ってエンジンへキーが渡らないよう IME 判定より前)。
@@ -222,12 +247,7 @@
     }
     if (e.key === '-' || (e.key.length === 1 && e.key >= 'a' && e.key <= 'z')) {
       e.preventDefault();
-      const result = engine.pressKey(SELF_ID, e.key, now);
-      sound.playForResult(result);
-      if (result === 'accepted' || result === 'activated') {
-        imeWarning = false;
-      }
-      refresh(now);
+      typeKey(e.key);
     }
   }
 </script>
@@ -235,7 +255,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if phase === 'start'}
-  <MatchStartScreen />
+  <MatchStartScreen onStart={beginCountdown} />
 {:else if phase === 'countdown' || phase === 'battle'}
   <MatchBattleScreen
     {snapshot}
@@ -245,8 +265,11 @@
     onSelectCard={handleSelectCard}
     {muted}
     onToggleMute={handleToggleMute}
+    {touchKeyboardVisible}
+    onToggleTouchKeyboard={handleToggleTouchKeyboard}
+    onTypeKey={typeKey}
     countdownValue={phase === 'countdown' ? countdown.value : null}
   />
 {:else if finalOutcome}
-  <MatchResultScreen outcome={finalOutcome} {snapshot} />
+  <MatchResultScreen outcome={finalOutcome} {snapshot} onRetry={retry} />
 {/if}

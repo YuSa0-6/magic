@@ -5,6 +5,7 @@
   import Panel from '../../ui/Panel.svelte';
   import StatusBadge from '../../ui/StatusBadge.svelte';
   import CountdownOverlay from '../../ui/CountdownOverlay.svelte';
+  import TouchKeyboard, { TOUCH_KEYBOARD_RESERVE_PX } from '../../ui/TouchKeyboard.svelte';
   import { formatSeconds } from '../../lib/format';
   import { HAND_ROTATIONS } from '../../lib/card-format';
 
@@ -20,6 +21,12 @@
     muted: boolean;
     /** ミュート切替を親へ通知する(状態の書き込みは親で行う, ADR 0002)。 */
     onToggleMute: () => void;
+    /** 画面タッチキーボード(モバイル対応)の表示状態(表示専用)。 */
+    touchKeyboardVisible: boolean;
+    /** タッチキーボードの表示切替を親へ通知する(状態の書き込みは親で行う)。 */
+    onToggleTouchKeyboard: () => void;
+    /** タッチキーボードでタップされたキーを親のエンジン呼び出しへ渡す。 */
+    onTypeKey: (key: string) => void;
     /** カウントダウン中の表示値。null なら通常表示(盤面フル彩度・オーバーレイなし)。 */
     countdownValue?: number | 'go' | null;
   }
@@ -31,8 +38,22 @@
     onSelectCard,
     muted,
     onToggleMute,
+    touchKeyboardVisible,
+    onToggleTouchKeyboard,
+    onTypeKey,
     countdownValue = null,
   }: Props = $props();
+
+  // タッチキーボード表示中は .stage-viewport の下端を予約し、画面下部固定のキーボードと
+  // ステージ(手札)の重なりを防ぐ(theme.css の --touch-kbd-reserve)。
+  const stageViewportStyle = $derived(
+    touchKeyboardVisible ? `--touch-kbd-reserve: ${TOUCH_KEYBOARD_RESERVE_PX}px` : ''
+  );
+
+  function handleToggleTouchKeyboardClick(e: MouseEvent): void {
+    onToggleTouchKeyboard();
+    (e.currentTarget as HTMLButtonElement).blur();
+  }
 
   // ミュートトグルのクリック。トグル後はボタンを blur して以後の打鍵を妨げない(ADR 0012)。
   function handleMuteClick(e: MouseEvent): void {
@@ -56,7 +77,7 @@
   }
 </script>
 
-<div class="stage-viewport">
+<div class="stage-viewport" style={stageViewportStyle}>
   <div class="stage">
     <section class="battle" class:dimming={countdownValue != null}>
       <!-- 上段: 的のHP(左)と経過時間・ミュート(右) -->
@@ -84,6 +105,17 @@
             onclick={handleMuteClick}
           >
             {muted ? '🔇' : '🔊'}
+          </button>
+          <button
+            type="button"
+            class="mute"
+            aria-label={touchKeyboardVisible
+              ? 'タッチキーボードを非表示にする'
+              : 'タッチキーボードを表示する'}
+            aria-pressed={touchKeyboardVisible}
+            onclick={handleToggleTouchKeyboardClick}
+          >
+            ⌨️
           </button>
         </div>
       </header>
@@ -154,6 +186,11 @@
     {/if}
   </div>
 </div>
+
+{#if touchKeyboardVisible}
+  <!-- .stage(transform:scale)の外に置く。詳細は TouchKeyboard.svelte の配置コメント参照。 -->
+  <TouchKeyboard onKey={onTypeKey} />
+{/if}
 
 <style>
   /* オーバーレイ(position:absolute; inset:0)の位置基準。transform 済みで包含ブロックには
@@ -243,6 +280,8 @@
     background: rgba(201, 163, 90, 0.06);
     color: var(--text-heading);
     cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     font-size: 24px;
     line-height: 1;
     transition: box-shadow 0.12s ease-out;

@@ -5,6 +5,7 @@
   import { MatchTransport } from '../../lib/match-transport.svelte';
   import { SelfPredictor, type SelfTypingPrediction } from '../../lib/match-prediction';
   import * as sound from '../../lib/sound.svelte';
+  import { isTouchKeyboardVisible, toggleTouchKeyboard } from '../../lib/touch-input.svelte';
   import MatchBattleScreen from '../match/MatchBattleScreen.svelte';
   import MatchResultScreen from '../match/MatchResultScreen.svelte';
   import Panel from '../../ui/Panel.svelte';
@@ -46,6 +47,10 @@
   // 効果音のミュート状態(ADR 0002: 状態は親が sound モジュール経由で保持し props で渡す)。
   let muted = $state(sound.isMuted());
 
+  // 画面タッチキーボード(モバイル対応)の表示状態。Game/Match.svelte と同じく touch-input
+  // モジュール(正)の $state を鏡写しする。
+  let touchKeyboardVisible = $state(isTouchKeyboardVisible());
+
   // 盤面結果音(被弾/防御=自陣 / 命中=相手)検出用の前値トラッカー(ADR 0012 の盤面結果節)。
   // 非リアクティブな plain let。差分は transport.authState(HP/シールドの唯一の権威源)に対して
   // 取る(下の盤面結果 $effect)。null は未観測の番兵で、最初の観測ではベースライン設定のみ。
@@ -58,6 +63,11 @@
   function handleToggleMute(): void {
     sound.toggleMute();
     muted = sound.isMuted();
+  }
+
+  function handleToggleTouchKeyboard(): void {
+    toggleTouchKeyboard();
+    touchKeyboardVisible = isTouchKeyboardVisible();
   }
 
   // 自分のデッキ(ID 配列 + 解決済み Card)。提出と予測初期化に使う。
@@ -278,6 +288,20 @@
     }
   }
 
+  // 打鍵1つ分の判定処理。物理キーボード(handleKeydown)と画面タッチキーボード
+  // (TouchKeyboard の onKey)の両方から呼ばれる共通経路(Match.svelte と同じ規約)。
+  function typeKey(key: string): void {
+    if (transport.phase !== 'matched' || predictor === null) {
+      return;
+    }
+    const t = now();
+    const result = predictor.press(key, t);
+    sound.playForResult(result);
+    transport.enqueuePress(key, t);
+    prediction = predictor.snapshot();
+    imeWarning = false;
+  }
+
   // window keydown を一元処理する(対戦中の自陣入力のみ)。Match.svelte と同じ規約。
   function handleKeydown(e: KeyboardEvent): void {
     if (transport.phase === 'ended') {
@@ -316,11 +340,7 @@
     }
     if (e.key === '-' || (e.key.length === 1 && e.key >= 'a' && e.key <= 'z')) {
       e.preventDefault();
-      const result = predictor.press(e.key, t);
-      sound.playForResult(result);
-      transport.enqueuePress(e.key, t);
-      prediction = predictor.snapshot();
-      imeWarning = false;
+      typeKey(e.key);
     }
   }
 
@@ -472,6 +492,9 @@
     {statusBanner}
     {muted}
     onToggleMute={handleToggleMute}
+    {touchKeyboardVisible}
+    onToggleTouchKeyboard={handleToggleTouchKeyboard}
+    onTypeKey={typeKey}
   />
 {:else}
   <!-- matchStart 直後で最初の state がまだ届いていない -->

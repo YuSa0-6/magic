@@ -147,6 +147,9 @@
 
   .card.interactive {
     cursor: pointer;
+    /* タップ操作向け: 300ms 遅延・ダブルタップズームを抑止し、タップ時の枠ハイライトも消す。 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* 前面: 通常カード=羊皮紙+グレー枠 / 効果カード=金味の羊皮紙+金枠。 */

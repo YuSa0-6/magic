@@ -32,6 +32,9 @@
     font-weight: 700;
     text-decoration: none;
     cursor: pointer;
+    /* タップ操作向け: 300ms 遅延・ダブルタップズームを抑止し、タップ時の枠ハイライトも消す。 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     transition:
       transform 0.12s ease-out,
       box-shadow 0.12s ease-out,

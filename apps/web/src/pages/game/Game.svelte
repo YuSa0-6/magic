@@ -11,6 +11,7 @@
   import ResultScreen from './ResultScreen.svelte';
   import * as sound from '../../lib/sound.svelte';
   import { Countdown } from '../../lib/countdown.svelte';
+  import { isTouchKeyboardVisible, toggleTouchKeyboard } from '../../lib/touch-input.svelte';
 
   // ゲーム内の画面遷移。'start'(準備) → 'countdown'(開始演出) → 'battle' → 'result' と進む。
   type Phase = 'start' | 'countdown' | 'battle' | 'result';
@@ -45,6 +46,11 @@
   // ビュー BattleScreen には props で渡す薄い形にする)。localStorage 永続は sound 側。
   let muted = $state(sound.isMuted());
 
+  // 画面タッチキーボード(モバイル対応)の表示状態。状態の正は touch-input モジュール
+  // (localStorage 永続 + pointer:coarse 既定)にあり、ここは sound の muted と同じく
+  // 表示専用の $state を鏡写しする(ADR 0002)。
+  let touchKeyboardVisible = $state(isTouchKeyboardVisible());
+
   // 命中音(的 HP 減少)検出用の前値トラッカー(ADR 0012 の盤面結果節)。
   // 非リアクティブな plain let。null は未観測の番兵で、最初の観測ではベースライン設定のみ
   // 行い鳴らさない(初期満タンや取りこぼしでの誤発火を防ぐ)。新バトル/再戦で null に戻す。
@@ -55,6 +61,11 @@
   function handleToggleMute(): void {
     sound.toggleMute();
     muted = sound.isMuted();
+  }
+
+  function handleToggleTouchKeyboard(): void {
+    toggleTouchKeyboard();
+    touchKeyboardVisible = isTouchKeyboardVisible();
   }
 
   // 入力軸スナップショットを取り直し、終了していればリザルトへ遷移する。
@@ -142,6 +153,23 @@
     }
   }
 
+  // 打鍵1つ分の判定処理。物理キーボード(handleKeydown)と画面タッチキーボード
+  // (TouchKeyboard の onKey)の両方から呼ばれる共通経路(ADR 0006: ロジックの重複を避ける)。
+  // バトル中以外(カウントダウン中含む)は無視する。
+  function typeKey(key: string): void {
+    if (phase !== 'battle') {
+      return;
+    }
+    const now = performance.now();
+    const result = engine.pressKey(key, now);
+    sound.playForResult(result);
+    // 半角英小文字が正常に受理されたら IME 警告を解除する。
+    if (result === 'accepted' || result === 'activated') {
+      imeWarning = false;
+    }
+    refreshState(now);
+  }
+
   // window の keydown を一元処理する(ゲーム画面の表示中のみ捕捉される)。
   function handleKeydown(e: KeyboardEvent): void {
     // カウントダウン中は一切の入力を無視する(誤ってエンジンへキーが渡らないよう IME 判定より前)。
@@ -198,13 +226,7 @@
     // 英小文字と '-' のみを打鍵としてエンジンへ渡す。
     if (e.key === '-' || (e.key.length === 1 && e.key >= 'a' && e.key <= 'z')) {
       e.preventDefault();
-      const result = engine.pressKey(e.key, now);
-      sound.playForResult(result);
-      // 半角英小文字が正常に受理されたら IME 警告を解除する。
-      if (result === 'accepted' || result === 'activated') {
-        imeWarning = false;
-      }
-      refreshState(now);
+      typeKey(e.key);
     }
   }
 </script>
@@ -213,7 +235,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if phase === 'start'}
-  <StartScreen />
+  <StartScreen onStart={beginCountdown} />
 {:else if phase === 'countdown' || phase === 'battle'}
   <BattleScreen
     state={battleState}
@@ -222,8 +244,11 @@
     onSelectCard={handleSelectCard}
     {muted}
     onToggleMute={handleToggleMute}
+    {touchKeyboardVisible}
+    onToggleTouchKeyboard={handleToggleTouchKeyboard}
+    onTypeKey={typeKey}
     countdownValue={phase === 'countdown' ? countdown.value : null}
   />
 {:else if finalStats}
-  <ResultScreen stats={finalStats} clearTimeMs={battleState.clearTimeMs ?? 0} />
+  <ResultScreen stats={finalStats} clearTimeMs={battleState.clearTimeMs ?? 0} onRetry={retry} />
 {/if}

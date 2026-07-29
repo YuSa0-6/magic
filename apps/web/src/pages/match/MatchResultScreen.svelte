@@ -24,6 +24,9 @@
     promptText?: string;
     /** 再戦 UI(#17)。渡された時だけ結果画面に再戦導線を出す。オフラインは未指定。 */
     rematch?: RematchState;
+    /** タップ操作端末向けの再挑戦(モバイル対応, オフライン専用)。rematch が無い時だけ使う。
+     * オンライン(rematch あり)は rematch.onRematch のボタンで足りるため無視する。 */
+    onRetry?: () => void;
   }
 
   const {
@@ -32,6 +35,7 @@
     opponentLabel = '相手(ボット)',
     promptText = 'スペースキーで再戦',
     rematch,
+    onRetry,
   }: Props = $props();
 
   // 勝敗の見出し(視点は自陣)。outcome.kind は ongoing 以外がここに来る。
@@ -117,6 +121,8 @@
             <Button variant="primary" onclick={rematch.onRematch}>再戦</Button>
           {/if}
         </div>
+      {:else if onRetry}
+        <Button variant="primary" onclick={onRetry}>タップしてもう一度</Button>
       {/if}
 
       <nav class="nav">

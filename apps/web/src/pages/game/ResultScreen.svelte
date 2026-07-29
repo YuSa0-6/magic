@@ -10,9 +10,11 @@
   interface Props {
     stats: BattleStats;
     clearTimeMs: number;
+    /** タップ操作端末向けの再挑戦(モバイル対応)。スペースキーと同じ retry() を呼ぶ。 */
+    onRetry: () => void;
   }
 
-  const { stats, clearTimeMs }: Props = $props();
+  const { stats, clearTimeMs, onRetry }: Props = $props();
 
   // カードIDから表示名を引く(なければIDをそのまま使う)。
   const cardName = (id: string): string => CARDS.find((c) => c.id === id)?.name ?? id;
@@ -32,6 +34,7 @@
           <span class="value">{formatSeconds(clearTimeMs)}秒</span>
         </div>
         <p class="prompt">スペースキーでもう一度</p>
+        <Button variant="primary" onclick={onRetry}>タップしてもう一度</Button>
         <Button variant="ghost" href="/" onclick={(e) => handleNavClick(e, 'home')}
           >ホームへ戻る</Button
         >
